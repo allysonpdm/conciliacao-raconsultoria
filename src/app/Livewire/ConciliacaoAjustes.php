@@ -3,20 +3,21 @@
 namespace App\Livewire;
 
 use App\Models\ContaConciliada;
+use App\Models\ErroPagamento;
+
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Tables\Columns\CheckboxColumn;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Table;
-use Filament\Actions\BulkAction;
-use Filament\Forms\Components\Select;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+
 use Livewire\Component;
 
 class ConciliacaoAjustes extends Component implements HasForms, HasTable, HasActions
@@ -25,9 +26,9 @@ class ConciliacaoAjustes extends Component implements HasForms, HasTable, HasAct
     use InteractsWithTable;
     use InteractsWithActions;
 
-    public $conciliacaoId;
+    public int $conciliacaoId;
 
-    public function mount($conciliacaoId)
+    public function mount(int $conciliacaoId): void
     {
         $this->conciliacaoId = $conciliacaoId;
     }
@@ -35,64 +36,69 @@ class ConciliacaoAjustes extends Component implements HasForms, HasTable, HasAct
     public function table(Table $table): Table
     {
         return $table
-            ->query(ContaConciliada::query()
-                ->where('conciliacao_id', $this->conciliacaoId)
+            ->query(
+                ContaConciliada::query()
+                    ->where('conciliacao_id', $this->conciliacaoId)
+                    ->orderBy('balanceado', 'asc')
+                    ->orderBy('numero', 'asc')
             )
             ->selectable()
             ->columns([
                 TextColumn::make('numero')
-                    ->label('Número'),
+                    ->label('Número')
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('nome')
-                    ->label('Nome'),
-                TextColumn::make('mascara_contabil')
-                    ->label('Máscara Contábil'),
+                    ->label('Nome')
+                    ->sortable()
+                    ->searchable(),
                 IconColumn::make('balanceado')
-                    ->toggleable()
-                    ->boolean(),
+                    ->label('Status')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger'),
+                TextColumn::make('mascara_contabil')
+                    ->label('Máscara Contábil')
+                    ->sortable(),
             ])
             ->filters([
-                Filter::make('balanceado')
-                    ->label('Balanceado')
-                    ->schema([
-                        Select::make('balanceado')
-                            ->options([
-                                1 => 'Sim',
-                                0 => 'Não',
-                            ])
-                            ->default(0)
-                            ->placeholder('Todos'),
-                    ])
-                    ->query(function (Builder $query, array $data) {
-                        $value = $data['balanceado'] ?? null;
-
-                        if ($value === null || $value === '') {
-                            return $query;
-                        }
-
-                        return $query->where('balanceado', (int) $value);
-                    })
-                    ->indicateUsing(function (array $data): ?string {
-                        $value = $data['balanceado'] ?? null;
-
-                        if ($value === null || $value === '') {
-                            return null;
-                        }
-
-                        return 'Balanceado: ' . (($value) ? 'Sim' : 'Não');
-                    }),
-            ])
-            ->toolbarActions([
-                BulkAction::make('selecionar_para_proxima_etapa')
-                    ->label('Selecionar para próxima etapa')
-                    ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
-                        $ids = $records->pluck('id')->toArray();
-                        session()->put('contas_para_conciliar', $ids);
-                    })
-                    ->successNotificationTitle('Contas marcadas para próxima etapa'),
+                Filter::make('somente_desbalanceadas')
+                    ->label('Somente desbalanceadas')
+                    ->query(fn(Builder $query) => $query->where('balanceado', false))
+                    ->default(),
             ]);
     }
 
-    public function render()
+    // JS-driven entrypoint: recebe IDs diretamente do cliente
+    public function confirmarSelecionadasFromFooterWithIds(array $ids): array
+    {
+        if (empty($ids)) {
+            Notification::make()
+                ->warning()
+                ->title('Nenhuma conta selecionada')
+                ->body('Selecione pelo menos uma conta antes de continuar.')
+                ->send();
+            return ['hasErrors' => true];
+        }
+
+        session()->put("contas_para_conciliar_{$this->conciliacaoId}", $ids);
+
+        $hasErrors = ErroPagamento::whereIn('conta_conciliada_id', $ids)->exists();
+
+        // Força re-render nos componentes dos steps seguintes para lerem a sessão atualizada
+        $this->dispatch('contas-confirmadas');
+
+        Notification::make()
+            ->success()
+            ->title(count($ids) . ' conta(s) confirmada(s).')
+            ->send();
+
+        return ['hasErrors' => $hasErrors];
+    }
+
+    public function render(): \Illuminate\Contracts\View\View
     {
         return view('livewire.conciliacao-ajustes');
     }

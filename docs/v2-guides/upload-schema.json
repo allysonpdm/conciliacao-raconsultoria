@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "upload_metadata",
+  "type": "object",
+  "required": ["format", "encoding", "has_header", "date_format", "decimal_separator", "columns_map"],
+  "properties": {
+    "format": {"type": "string", "enum": ["txt", "csv", "xlsx"], "description": "Formato do arquivo."},
+    "encoding": {"type": "string", "description": "Encoding do arquivo (ex.: UTF-8, ISO-8859-1). Use 'auto' para tentar detectar."},
+    "delimiter": {"type": "string", "description": "Delimitador de campo (ex.: '\\t', ','). Omitir para xlsx."},
+    "has_header": {"type": "boolean", "description": "Arquivo contém header na primeira linha."},
+    "date_format": {"type": "string", "description": "Formato de data esperado (ex.: DD/MM/YYYY)."},
+    "decimal_separator": {"type": "string", "enum": [".", ",", "auto"], "description": "Separador decimal ou 'auto' para inferir."},
+    "thousand_separator": {"type": ["string", "null"], "description": "Separador de milhares (opcional)."},
+    "account_block_pattern": {"type": "string", "description": "Regex (string) que identifica início de bloco de conta."},
+    "saldo_anterior_identifier": {"type": "string", "description": "Substring que identifica linha de saldo anterior."},
+    "columns_map": {
+      "type": "object",
+      "description": "Mapeamento índice->nome da coluna após split (indices como strings).",
+      "patternProperties": {
+        "^[0-9]+$": {"type": "string", "enum": ["data","historico","codigo","documento","debito","credito","saldo_banco"]}
+      },
+      "additionalProperties": false
+    },
+    "keywords": {"type": "object", "description": "Mapa palavra-chave -> ação (ex.: 'NOTA FISCAL' : 'invoice')", "additionalProperties": {"type": "string"}},
+    "normalize_note_number": {"type": "object", "description": "Regras/regex para normalização do número da nota (ex.: remove prefixos).", "properties": {"pattern": {"type": "string"}, "replacements": {"type": "array", "items": {"type": "object"}}}},
+    "ignore_empty_lines": {"type": "boolean", "default": true},
+    "trim_fields": {"type": "boolean", "default": true},
+    "sample_id": {"type": "string", "description": "Nome do sample em docs/files-examples/ para validação."},
+    "max_rows_preview": {"type": "integer", "minimum": 1, "default": 50}
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "format": "txt",
+      "encoding": "UTF-8",
+      "delimiter": "\t",
+      "has_header": false,
+      "date_format": "DD/MM/YYYY",
+      "decimal_separator": "auto",
+      "account_block_pattern": "^Conta:\\s*(\\d+)\\s*-\\s*(.+)$",
+      "saldo_anterior_identifier": "Saldo Anterior",
+      "columns_map": {"0":"data","1":"historico","2":"codigo","3":"documento","4":"debito","5":"credito","6":"saldo_banco"},
+      "keywords": {"NOTA FISCAL":"invoice","PAGAMENTO NOTA FISCAL":"payment"},
+      "sample_id": "ALLYSON.csv"
+    }
+  ]
+}

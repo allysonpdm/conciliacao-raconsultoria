@@ -6,6 +6,8 @@ use App\Models\Conciliacao;
 use App\Models\ContaConciliada;
 use App\Models\Nota;
 use Dom\Text;
+use Filament\Actions\BulkAction;
+use Filament\Notifications\Notification;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -25,7 +27,9 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Contracts\View\View;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class NotasFiscais extends Component implements HasForms, HasTable, HasActions
@@ -45,13 +49,17 @@ class NotasFiscais extends Component implements HasForms, HasTable, HasActions
     {
         return $table
             ->query(
-                Nota::whereHas(
-                    'contaConciliada',
-                function ($query) {
-                    $query->where('conciliacao_id', $this->conciliacaoId);
-                })
-                ->with('contaConciliada.pagamentos')
+                Nota::query()
+                    ->whereHas('contaConciliada', function ($query) {
+                        $selectedContaIds = session("contas_para_conciliar_{$this->conciliacaoId}", []);
+                        $query->where('conciliacao_id', $this->conciliacaoId);
+                        if (count($selectedContaIds) > 0) {
+                            $query->whereIn('id', $selectedContaIds);
+                        }
+                    })
+                    ->with('contaConciliada.pagamentos')
             )
+            ->selectable()
             ->searchable([
                 // Only provide a custom closure so we control the exact SQL generated
                 function (Builder $query, string $search) {
@@ -228,17 +236,45 @@ class NotasFiscais extends Component implements HasForms, HasTable, HasActions
                         'desconto_paga' => 'Paga com desconto',
                         'com_juros_paga' => 'Paga com juros',
                     ])
-                    ->label('Tipo da Nota')
-                    ->default([
-                        'nao_paga',
-                        'desconto_paga',
-                        'com_juros_paga',
-                    ]),
+                    ->label('Tipo da Nota'),
             ]);
     }
+
+    #[On('contas-confirmadas')]
+    public function atualizarContas(): void
+    {
+        // Limpa qualquer seleção de exportação anterior para evitar mostrar
+        // itens da exportação passada antes da nova seleção ser carregada.
+        session()->forget("notas_para_exportar_{$this->conciliacaoId}");
+    } // re-render força table() a ler a sessão nova
 
     public function render()
     {
         return view('livewire.notas-fiscais');
     }
+    // JS-driven entrypoint: recebe IDs diretamente do cliente (footer button)
+    public function marcarSelecionadasFromFooterWithIds(array $ids): array
+    {
+        if (empty($ids)) {
+            Notification::make()
+                ->warning()
+                ->title('Nenhuma nota selecionada')
+                ->send();
+
+            return ['ok' => false];
+        }
+
+        session()->put("notas_para_exportar_{$this->conciliacaoId}", $ids);
+
+        // Força re-render em componentes dependentes se necessário
+        $this->dispatch('contas-confirmadas');
+
+        Notification::make()
+            ->success()
+            ->title(count($ids) . ' nota(s) marcada(s) para exportação.')
+            ->send();
+
+        return ['ok' => true];
+    }
+
 }

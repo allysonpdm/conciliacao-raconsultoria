@@ -5,6 +5,8 @@ namespace App\Livewire;
 use App\Models\Nota;
 use App\Models\Pagamento;
 use Dom\Text;
+use Filament\Actions\BulkAction;
+use Filament\Notifications\Notification;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\DatePicker;
@@ -23,6 +25,8 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class Pagamentos extends Component implements HasForms, HasTable, HasActions
@@ -42,14 +46,20 @@ class Pagamentos extends Component implements HasForms, HasTable, HasActions
     {
         return $table
             ->query(
-                Pagamento::whereHas('contaConciliada', function ($query) {
-                    $query->where('conciliacao_id', $this->conciliacaoId);
-                })
-                ->with([
-                    'contaConciliada',
-                    'sugestao'
-                ])
+                Pagamento::query()
+                    ->whereHas('contaConciliada', function ($query) {
+                        $selectedContaIds = session("contas_para_conciliar_{$this->conciliacaoId}", []);
+                        $query->where('conciliacao_id', $this->conciliacaoId);
+                        if (count($selectedContaIds) > 0) {
+                            $query->whereIn('id', $selectedContaIds);
+                        }
+                    })
+                    ->with([
+                        'contaConciliada',
+                        'sugestao',
+                    ])
             )
+            ->selectable()
             ->searchable([
                 function (Builder $query, string $search) {
                     $like = "%{$search}%";
@@ -215,15 +225,44 @@ class Pagamentos extends Component implements HasForms, HasTable, HasActions
                         'parcialmente pago' => 'Parcialmente Pago',
                         'pago com nota' => 'Pago com Nota',
                     ])
-                    ->label('Tipo do pagamento')
-                    ->default([
-                        'nota não encontrada',
-                    ]),
+                    ->label('Tipo do pagamento'),
             ]);
     }
+
+    #[On('contas-confirmadas')]
+    public function atualizarContas(): void
+    {
+        // Limpa seleção de exportação anterior para pagamentos
+        session()->forget("pagamentos_para_exportar_{$this->conciliacaoId}");
+    } // re-render força table() a ler a sessão nova
 
     public function render()
     {
         return view('livewire.pagamentos');
     }
+    // JS-driven entrypoint: recebe IDs diretamente do cliente (footer button)
+    public function marcarSelecionadasFromFooterWithIds(array $ids): array
+    {
+        if (empty($ids)) {
+            Notification::make()
+                ->warning()
+                ->title('Nenhum pagamento selecionado')
+                ->send();
+
+            return ['ok' => false];
+        }
+
+        session()->put("pagamentos_para_exportar_{$this->conciliacaoId}", $ids);
+
+        // Força re-render em componentes dependentes se necessário
+        $this->dispatch('contas-confirmadas');
+
+        Notification::make()
+            ->success()
+            ->title(count($ids) . ' pagamento(s) marcado(s) para exportação.')
+            ->send();
+
+        return ['ok' => true];
+    }
+
 }

@@ -62,7 +62,7 @@ class Conciliacao extends Page
         return $schema
             ->components([
                 Wizard::make([
-                    Step::make('Upload do arquivo')
+                    Step::make('Subir o Arquivo')
                         ->icon(Heroicon::DocumentArrowUp)
                         ->schema([
                             Form::make([
@@ -91,8 +91,9 @@ class Conciliacao extends Page
                             ])
                                 ->columns(3)
                         ]),
-                    Step::make('Estatísticas da Conciliação')
+                    Step::make('Visão Geral')
                         ->icon(Heroicon::ChartBar)
+                        ->description('Resumo dos dados processados.')
                         ->schema([
                             Livewire::make(
                                 component: \App\Livewire\ConciliacaoOverview::class,
@@ -100,9 +101,9 @@ class Conciliacao extends Page
                             )
                                 ->key("conciliacao-overview-widget-{$this->getRecord()?->id}-{$refreshKey}")
                         ]),
-                    Step::make('Realizar ajustes')
-                        ->icon(Heroicon::PencilSquare)
-                        ->description('Selecione as contas que deseja conciliar.')
+                    Step::make('Selecionar Contas')
+                        ->icon('heroicon-o-list-bullet')
+                        ->description('Selecione as contas desejadas e clique em "Confirmar contas e continuar" para prosseguir.')
                         ->schema([
                             Livewire::make(
                                 component: \App\Livewire\ConciliacaoAjustes::class,
@@ -110,9 +111,19 @@ class Conciliacao extends Page
                             )
                                 ->key("conciliacao-ajustes-widget-{$this->getRecord()?->id}-{$refreshKey}")
                         ]),
-                    Step::make('Verifique as Notas Fiscais')
+                    Step::make('Corrigir Erros')
+                        ->icon('heroicon-o-wrench-screwdriver')
+                        ->description('Revise e corrija possíveis erros humanos identificados nas contas selecionadas.')
+                        ->schema([
+                            Livewire::make(
+                                component: \App\Livewire\CorrigirErros::class,
+                                data: ['conciliacaoId' => $this->getRecord()?->id]
+                            )
+                                ->key("conciliacao-erros-widget-{$this->getRecord()?->id}-{$refreshKey}")
+                        ]),
+                    Step::make('Notas Fiscais')
                         ->icon(Heroicon::DocumentCurrencyDollar)
-                        ->description('Revise as notas com descontos, juros e sem pagamento.')
+                        ->description('Notas não pagas, pagas com desconto e pagas com juros das contas selecionadas.')
                         ->schema([
                             Livewire::make(
                                 component: \App\Livewire\NotasFiscais::class,
@@ -120,9 +131,9 @@ class Conciliacao extends Page
                             )
                                 ->key("conciliacao-notas-widget-{$this->getRecord()?->id}-{$refreshKey}")
                         ]),
-                    Step::make('Verifique os Pagamentos')
+                    Step::make('Pagamentos sem Nota')
                         ->icon(Heroicon::Banknotes)
-                        ->description('Revise os pagamentos sem notas.')
+                        ->description('Pagamentos das contas selecionadas que não possuem nota fiscal correspondente.')
                         ->schema([
                             Livewire::make(
                                 component: \App\Livewire\Pagamentos::class,
@@ -130,11 +141,18 @@ class Conciliacao extends Page
                             )
                                 ->key("conciliacao-pagamentos-widget-{$this->getRecord()?->id}-{$refreshKey}")
                         ]),
-                    Step::make('Arquivo de Exportação')
+                    Step::make('Exportação')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->description('Gere o arquivo de exportação com os registros selecionados.')
                         ->schema([
-                            // ...
+                            // Não implementado ainda
                         ]),
-                ])->skippable(fn() => $this->getRecord()->file !== null)
+                ])->key('conciliacao-wizard')
+                    ->nextAction(fn($action) => $action->extraAttributes([
+                        'x-show' => 'getStepIndex(step) !== 2',
+                        'x-on:click' => "if (getStepIndex(step) === 4 || getStepIndex(step) === 5) { window.dispatchEvent(new CustomEvent('marcar-para-exportacao')); } else { requestNextStep(); }",
+                    ]))
+                    ->skippable(fn() => $this->getRecord()->file !== null)
             ])
             ->record($this->getRecord())
             ->statePath('data');
