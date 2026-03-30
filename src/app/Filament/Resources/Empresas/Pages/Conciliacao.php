@@ -41,6 +41,8 @@ class Conciliacao extends Page
 
     private bool $isSaving = false;
 
+    public bool $fileProcessed = false;
+
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
@@ -55,6 +57,8 @@ class Conciliacao extends Page
     public function form(Schema $schema): Schema
     {
         $userId = Auth::id();
+        $refreshKey = $this->fileProcessed ? now()->timestamp : 'initial';
+
         return $schema
             ->components([
                 Wizard::make([
@@ -94,13 +98,37 @@ class Conciliacao extends Page
                                 component: \App\Livewire\ConciliacaoOverview::class,
                                 data: ['conciliacaoId' => $this->getRecord()?->id]
                             )
-                                ->key('conciliacao-overview-widget')
+                                ->key("conciliacao-overview-widget-{$this->getRecord()?->id}-{$refreshKey}")
                         ]),
                     Step::make('Realizar ajustes')
                         ->icon(Heroicon::PencilSquare)
                         ->description('Selecione as contas que deseja conciliar.')
                         ->schema([
-
+                            Livewire::make(
+                                component: \App\Livewire\ConciliacaoAjustes::class,
+                                data: ['conciliacaoId' => $this->getRecord()?->id]
+                            )
+                                ->key("conciliacao-ajustes-widget-{$this->getRecord()?->id}-{$refreshKey}")
+                        ]),
+                    Step::make('Verifique as Notas Fiscais')
+                        ->icon(Heroicon::DocumentCurrencyDollar)
+                        ->description('Revise as notas com descontos, juros e sem pagamento.')
+                        ->schema([
+                            Livewire::make(
+                                component: \App\Livewire\NotasFiscais::class,
+                                data: ['conciliacaoId' => $this->getRecord()?->id]
+                            )
+                                ->key("conciliacao-notas-widget-{$this->getRecord()?->id}-{$refreshKey}")
+                        ]),
+                    Step::make('Verifique os Pagamentos')
+                        ->icon(Heroicon::Banknotes)
+                        ->description('Revise os pagamentos sem notas.')
+                        ->schema([
+                            Livewire::make(
+                                component: \App\Livewire\Pagamentos::class,
+                                data: ['conciliacaoId' => $this->getRecord()?->id]
+                            )
+                                ->key("conciliacao-pagamentos-widget-{$this->getRecord()?->id}-{$refreshKey}")
                         ]),
                     Step::make('Arquivo de Exportação')
                         ->schema([
@@ -139,6 +167,11 @@ class Conciliacao extends Page
                 empresa: $this->record,
                 pathFile: $data['file'],
             );
+
+            // Marca que o arquivo foi processado com sucesso
+            $this->fileProcessed = true;
+            $this->dispatch('refresh-components');
+
         } catch (\Exception $e) {
             Notification::make()
                 ->title($e->getMessage())

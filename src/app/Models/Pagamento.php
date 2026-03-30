@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Auditable as AuditingAuditable;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -39,6 +40,22 @@ class Pagamento extends Model implements Auditable
     public function contaConciliada(): BelongsTo
     {
         return $this->belongsTo(related: ContaConciliada::class, foreignKey: 'conta_conciliada_id');
+    }
+
+    public function notas(): HasMany
+    {
+        return $this->hasMany(related: Nota::class, foreignKey: 'numero', localKey: 'numero_nota')
+            ->where('conta_conciliada_id', $this->conta_conciliada_id);
+    }
+
+    public function sugestao(): HasMany
+    {
+        return $this->hasMany(
+            related: ErroPagamento::class,
+            foreignKey: 'sugestao_numero_nota',
+            localKey: 'numero_nota'
+        )
+        ->where('erros_pagamentos.conta_conciliada_id', $this->conta_conciliada_id);
     }
 
 }

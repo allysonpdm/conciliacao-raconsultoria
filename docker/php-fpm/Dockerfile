@@ -249,7 +249,7 @@ RUN if [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ] || { [ $(php -r "echo PHP_M
   sed -i "s/xdebug.profiler_enable=0/; xdebug.profiler_enable=0/" /usr/local/etc/php/conf.d/xdebug.ini && \
   sed -i "s/xdebug.profiler_output_dir=/xdebug.output_dir=/" /usr/local/etc/php/conf.d/xdebug.ini && \
   sed -i "s/xdebug.remote_mode=req/; xdebug.remote_mode=req/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_autostart=0/xdebug.start_with_request=yes/" /usr/local/etc/php/conf.d/xdebug.ini && \
+  sed -i "s/xdebug.remote_autostart=0/xdebug.start_with_request=trigger/" /usr/local/etc/php/conf.d/xdebug.ini && \
   sed -i "s/xdebug.remote_enable=0/xdebug.mode=debug/" /usr/local/etc/php/conf.d/xdebug.ini \
 ;else \
   sed -i "s/xdebug.remote_autostart=0/xdebug.remote_autostart=1/" /usr/local/etc/php/conf.d/xdebug.ini && \
@@ -334,19 +334,21 @@ RUN if [ ${INSTALL_SOCKETS} = true ]; then \
 ARG INSTALL_SWOOLE=false
 RUN set -eux; \
     if [ ${INSTALL_SWOOLE} = true ]; then \
-      # Install Php Swoole Extension
+      # Ensure an alternative C/C++ compiler to avoid GCC internal errors
+      apt-get update -yqq && apt-get install -y --no-install-recommends clang && \
+      # Install Php Swoole Extension using clang/clang++ to avoid GCC ICEs
       if   [ $(php -r "echo PHP_VERSION_ID - PHP_RELEASE_VERSION;") = "50600" ]; then \
-        pecl install swoole-2.0.10; \
+        CC=clang CXX=clang++ pecl install swoole-2.0.10; \
       elif [ $(php -r "echo PHP_VERSION_ID - PHP_RELEASE_VERSION;") = "70000" ]; then \
-        pecl install swoole-4.3.5; \
+        CC=clang CXX=clang++ pecl install swoole-4.3.5; \
       elif [ $(php -r "echo PHP_VERSION_ID - PHP_RELEASE_VERSION;") = "70100" ]; then \
-        pecl install swoole-4.5.11; \
+        CC=clang CXX=clang++ pecl install swoole-4.5.11; \
       elif [ $(php -r "echo PHP_MAJOR_VERSION;") = "7" ]; then \
-        pecl install swoole-4.8.12; \
+        CC=clang CXX=clang++ pecl install swoole-4.8.12; \
       elif [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ] && [ $(php -r "echo PHP_MINOR_VERSION;") = "0" ]; then \
-        pecl install swoole-5.1.2; \
+        CC=clang CXX=clang++ pecl install swoole-5.1.2; \
       else \
-        pecl install swoole; \
+        CC=clang CXX=clang++ pecl install swoole; \
       fi; \
       docker-php-ext-enable swoole; \
       php -m | grep -q 'swoole'; \
@@ -708,7 +710,8 @@ RUN if [ ${INSTALL_IONCUBE} = true ]; then \
 ARG INSTALL_OPCACHE=false
 
 RUN if [ ${INSTALL_OPCACHE} = true ]; then \
-    docker-php-ext-install opcache \
+  apt-get update -yqq && apt-get install -y --no-install-recommends build-essential autoconf pkg-config clang && \
+  docker-php-ext-install opcache \
 ;fi
 
 # Copy opcache configration
@@ -1435,9 +1438,10 @@ RUN if [ ${INSTALL_FAKETIME} = true ]; then \
     echo "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1" > /etc/ld.so.preload \
 ;fi
 
-# Install wkhtmltopdf
-RUN apt-get update && \
-    apt-get install -y wkhtmltopdf
+# Install wkhtmltopdf (handled conditionally earlier in this Dockerfile)
+RUN if [ ${INSTALL_WKHTMLTOPDF} = true ]; then \
+  echo "wkhtmltopdf installation handled earlier in this Dockerfile"; \
+fi
 
 # Configure locale.
 ARG LOCALE=POSIX

@@ -528,7 +528,7 @@ class Auditar
             'saldo_anterior' => $totals['saldo_anterior'],
             'saldo_corrente' => round($totals['saldo_corrente'], 2),
             'saldo_banco' => $totals['saldo_banco'],
-            'saldo_balanceado' => abs(($totals['total_debitos'] + $totals['saldo_anterior']) - $totals['total_creditos']) < self::TOLERANCE,
+            'saldo_balanceado' => abs($totals['total_debitos'] - $totals['total_creditos'] - $totals['saldo_anterior']) < self::TOLERANCE,
             'total_debitos' => round($totals['total_debitos'], 2),
             'total_creditos' => round($totals['total_creditos'], 2),
             'ajustados' => $problemas['ajustados'],

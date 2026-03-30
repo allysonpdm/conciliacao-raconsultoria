@@ -11,4 +11,7 @@ fi
 crond -l 2 -b
 
 # Start nginx in foreground
+mkdir -p /var/log/nginx
+chown -R www-data:www-data /var/log/nginx || true
+chmod 755 /var/log/nginx || true
 nginx
